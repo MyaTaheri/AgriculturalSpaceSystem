@@ -16,17 +16,15 @@ Two simulations are run:
 ---
 
 ## Quick Start
- 
+
 1. Open `diet_simulation.m` in MATLAB
-2. Edit the three variables at the top of **Section 1** -`num_women`, `num_men`, and `sim_days`
+2. Edit the three variables at the top of **Section 1**:
+   m```matlab
+   num_women   = 3;    % number of women in crew
+   num_men     = 3;    % number of men in crew
+   sim_days    = 14;   % mission duration in days
+   ```
 3. Hit **Run**. All figures and console output generate automatically.
-The three config variables are:
- ```matlab
-    num_women   = 3;    % number of women in crew
-num_men     = 3;    % number of men in crew
-sim_days    = 14;   % mission duration in days
-```
- 
 
 ---
 
