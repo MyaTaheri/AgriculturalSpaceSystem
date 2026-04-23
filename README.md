@@ -16,17 +16,16 @@ Two simulations are run:
 ---
 
 ## Quick Start
- 
+
 1. Open `diet_simulation.m` in MATLAB
-2. Edit the three variables at the top of **Section 1** -`num_women`, `num_men`, and `sim_days`
+2. Edit the three variables at the top of **Section 1** — `num_women`, `num_men`, and `sim_days`
 3. Hit **Run**. All figures and console output generate automatically.
+
 The three config variables are:
- ```matlab
+
     num_women   = 3;    % number of women in crew
-num_men     = 3;    % number of men in crew
-sim_days    = 14;   % mission duration in days
-```
- 
+    num_men     = 3;    % number of men in crew
+    sim_days    = 14;   % mission duration in days
 
 ---
 
@@ -58,15 +57,17 @@ To use sex-specific multipliers per diet in the future, replace `MALE_MULTIPLIER
 
 ---
 
-## How Missing Calories Are Handled
+## How Calories Are Calculated
 
-Most diets only have calorie annotations for a subset of days. Entries with no calorie data are stored as `0` in Section 2. **Section 3 automatically fills these in** using a mass-scaled estimate:
+Calories are computed ingredient-by-ingredient using nutritional data from `Overall_Data_Collection.xlsx`. Each ingredient's mass (in grams) is multiplied by its kcal/100g value from the food database defined in Section 2 of the script.
 
-- Baseline: **1800 kcal/day** for women (space mission, sedentary-moderate)
-- Each day's estimate scales up or down based on that day's food mass relative to the diet's average
-- Days estimated this way are flagged with a note on the calorie density plot
+Confirmed calorie targets from the Dietary Requirements sheet:
+- **Women: 2000 kcal/day**
+- **Men: 2600 kcal/day**
 
-This means you never need to manually edit the `0` placeholders — they are intentional signals to Section 3.
+The male mass multiplier is set to **1.3** (2600/2000) to match these targets, replacing the previous rough 1.5× estimate.
+
+Section 4 acts as a safety net — if any day still has zero calories after the ingredient-level calculation (e.g. a food with no database entry), it fills in a mass-scaled estimate using the 2000 kcal/day women's target. This is flagged on the calorie density plot.
 
 ---
 
@@ -105,11 +106,12 @@ A ranked table is printed to the MATLAB console showing each diet's total mass, 
 | Section | What it does |
 |---------|-------------|
 | 1 | Crew configuration — **edit this to change scenarios** |
-| 2 | Diet data — ingredient masses and calories, hardcoded from Excel |
-| 3 | Missing calorie estimation (mass-scaled, automatic) |
-| 4 | Expand 7-day plans to full `sim_days` length |
-| 5 | Compute crew-level totals and summary stats |
-| 6 | Color and style definitions |
+| 2 | Food nutrition database — kcal/100g and macros from Overall_Data_Collection.xlsx |
+| 3 | Diet meal plan data — ingredient masses and per-ingredient calorie calculations |
+| 4 | Safety net for any remaining zero-calorie days (mass-scaled fallback) |
+| 5 | Expand 7-day plans to full `sim_days` length |
+| 6 | Compute crew-level totals and summary stats |
+| 7 | Color and style definitions |
 | Sim 1A | Per-diet grouped bar charts (M/F) |
 | Sim 1B | Cumulative mass overlap line chart |
 | Sim 1C | Calorie density overlap line chart |
@@ -135,13 +137,23 @@ A ranked table is printed to the MATLAB console showing each diet's total mass, 
 
 ## Known Limitations
 
-- **Diet 3 (Max CO2)** has the least quantified ingredient data — microgreen salad quantities were listed by food type only, not by mass. Those meals use conservative estimates.
-- Water is excluded from food mass calculations (not payload mass for a closed-loop system).
-- Calorie estimates for unannotated days are approximations — treat the calorie density plots as indicative, not precise.
-- The 1.5× male multiplier is uniform across all diets and all days. Real metabolic needs vary by activity, body weight, and mission phase.
+- **Diet 3 (Max CO2)** has the least quantified ingredient data — microgreen salad quantities were listed by food type only, not by mass. Those meals use conservative estimates based on the primary CO2-consuming ingredients (spirulina, chlorella, mushrooms).
+- Water is excluded from food mass calculations (not payload mass in a closed-loop system).
+- Crickets have no data sheet in `Overall_Data_Collection.xlsx` yet. The script uses standard dried cricket nutritional values (430 kcal/100g, 65g protein) as a placeholder — update `foods.crickets` in Section 2 when your team adds the sheet.
+- Turkey's Tail and Cordyceps mushrooms are noted as medicinal in the data sheet and are not included in any calorie calculations.
+- The 1.3× male mass multiplier is derived from the 2600/2000 kcal ratio and applied uniformly. Real metabolic needs vary by activity level, body weight, and mission phase.
 
 ---
 
-## Data Source
+## Data Sources
 
-`Diet_Ideas.xlsx` — 5 sheets, one per diet, each containing a 14-day meal plan with ingredients, macros, and calorie annotations where available. Created as part of a space nutrition project exploring sustainable closed-loop diet options.
+**`Diet_Ideas.xlsx`** — 5 sheets, one per diet, each containing a 14-day meal plan with ingredient lists and masses. Created as part of a space nutrition project exploring sustainable closed-loop diet options.
+
+**`Overall_Data_Collection.xlsx`** — Nutritional database with one sheet per food ingredient. Contains per-100g values for calories, protein, fat, carbs, vitamins, and minerals, plus space-relevant environmental data (CO2 consumed/produced, O2 produced/consumed, water requirements, sunlight requirements, space growth notes). Sheets include:
+
+- Dietary Requirements (confirmed calorie targets: 2000 kcal/day women, 2600 kcal/day men)
+- Spirulina, Chlorella, Chia Seeds, Mealworms, Crickets, Astaxanthin
+- Oyster Mushrooms, Lion's Mane Mushroom
+- Turkey's Tail Mushroom, Cordyceps Mushroom (medicinal only, not in diet calculations)
+
+Calorie values in the simulation are computed ingredient-by-ingredient using this database rather than from annotated meal totals.

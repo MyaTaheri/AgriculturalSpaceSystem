@@ -6,8 +6,14 @@
 %    SIM 1 - Calories per mass over time (per diet, M/F breakdown)
 %    SIM 2 - Cross-diet comparison + ranking
 %
-%  Data Source: Diet_Ideas.xlsx (5 diets, 14-day meal plans)
-%  Men's diet = Women's x 1.5 (as specified in Excel)
+%  Data Sources:
+%    Diet_Ideas.xlsx            - 5 diets, 14-day meal plans, ingredient masses
+%    Overall_Data_Collection.xlsx - per-food nutritional data (kcal/100g,
+%                                   macros, CO2, O2, water, sunlight)
+%
+%  Calorie targets: 2000 kcal/day women, 2600 kcal/day men
+%    (from Dietary Requirements sheet in Overall_Data_Collection.xlsx)
+%  Men's food mass = Women's x 1.3 (scaled to match 2600/2000 = 1.3 ratio)
 %  Days 8-14 repeat Days 1-7 cyclically
 % ==========================================================================
 
@@ -17,27 +23,60 @@ clear; clc; close all;
 %  SECTION 1: CREW CONFIGURATION (edit these!)
 % ==========================================================================
 
-num_women   = 5;       % number of women in crew
-num_men     = 5;       % number of men in crew
+num_women   = 3;       % number of women in crew
+num_men     = 3;       % number of men in crew
 sim_days    = 14;      % simulation duration in days (multiples of 14 recommended)
 
-%  Male calorie multiplier vs female (from Excel notes: "Multiply women's diet by 1.5")
-MALE_MULTIPLIER = 1.5;
+%  Male calorie multiplier: 2600/2000 = 1.3
+%  (from Dietary Requirements sheet in Overall_Data_Collection.xlsx)
+MALE_MULTIPLIER = 1.3;
 
 %% ==========================================================================
-%  SECTION 2: DIET DATA
+%  SECTION 2: FOOD NUTRITION DATABASE
+%  Source: Overall_Data_Collection.xlsx
+%  kcal_per_100g = calories per 100g dry/edible mass
+%  Serving sizes normalized to per-100g for easy scaling.
+%
+%  Calorie targets (from Dietary Requirements sheet):
+%    Women: 2000 kcal/day    Men: 2600 kcal/day
+%
+%  Foods with no kcal data use 0 and fall back to mass-scaled estimate
+%  in Section 3. Turkey's tail and Cordyceps are medicinal, not dietary.
+% ==========================================================================
+
+% food.name         = display name
+% food.kcal_100g    = kcal per 100g
+% food.protein_100g = g protein per 100g (for future macro tracking)
+% food.fat_100g     = g fat per 100g
+% food.carb_100g    = g carbs per 100g
+
+foods.spirulina        = struct('name','Spirulina',       'kcal_100g',290, 'protein_100g',60,  'fat_100g',8,    'carb_100g',24);
+foods.chlorella        = struct('name','Chlorella',        'kcal_100g',410, 'protein_100g',55,  'fat_100g',12,   'carb_100g',23);
+foods.chia             = struct('name','Chia Seeds',       'kcal_100g',490, 'protein_100g',17,  'fat_100g',31,   'carb_100g',42); % 140 kcal/oz = ~490/100g
+foods.mealworms        = struct('name','Mealworms (dried)','kcal_100g',510, 'protein_100g',53,  'fat_100g',28,   'carb_100g',7);
+foods.oyster_mushroom  = struct('name','Oyster Mushrooms', 'kcal_100g',33,  'protein_100g',2.9, 'fat_100g',0.19, 'carb_100g',6.94);
+foods.lions_mane       = struct('name','Lions Mane',       'kcal_100g',35,  'protein_100g',2.5, 'fat_100g',0.26, 'carb_100g',7.59);
+foods.crickets         = struct('name','Crickets (dried)', 'kcal_100g',430, 'protein_100g',65,  'fat_100g',13,   'carb_100g',5);  % standard dried cricket nutrition
+foods.astaxanthin      = struct('name','Astaxanthin Supp', 'kcal_100g',15,  'protein_100g',0,   'fat_100g',0,    'carb_100g',0);  % supplement, negligible
+
+% Helper: compute kcal given ingredient mass (g) and food struct
+% Usage: kcal_ingredient(foods.spirulina, 20)  -> kcal from 20g spirulina
+kcal_ingredient = @(food, mass_g) (mass_g / 100) * food.kcal_100g;
+
+%% ==========================================================================
+%  SECTION 3: DIET MEAL PLAN DATA
 %  Each diet has 7 unique days (days 8-14 repeat days 1-7).
 %  Mass per day = total food mass in grams (solid ingredients only, excl. water).
-%  Calories per day = kcal (from Excel; 0 = not specified, estimated below).
+%  Calories per day = calculated from ingredient masses using food database above.
 %
 %  Format: diets(d).name        - diet label
 %          diets(d).objective   - what was optimized
 %          diets(d).mass_f(day) - total solid food mass (g) for women, per day
 %          diets(d).kcal_f(day) - calories (kcal) for women, per day
 %
-%  NOTE: Mass values are summed from ingredient lists in the Excel sheet.
-%        Where calories were not listed, they are estimated from macros or
-%        marked with a best-effort value based on known nutritional data.
+%  Ingredient masses from Diet_Ideas.xlsx.
+%  Calories computed per ingredient using Overall_Data_Collection.xlsx data.
+%  Where a food has no entry in the database, 0 is used and estimated in Section 4.
 % ==========================================================================
 
 % ---- DIET 1: Minimize Sunlight ----
@@ -53,15 +92,40 @@ d1.mass_f = [
     25+15 + 60+150 + 70+200 + 0;                         % Day 6
     35+10 + 200+30 + 90+150 + 0;                         % Day 7
 ];
-% Calories (kcal) - from Excel where listed, estimated otherwise
+% Calories calculated from ingredient masses using food database
+% Day 1: Breakfast(chia 30g, spirulina 10g, chlorella 5g)
+%        Lunch(oyster 150g, lions_mane 100g, spirulina 20g, chlorella 10g, crickets 40g)
+%        Dinner(mealworms 80g, oyster 100g, lions_mane 100g, spirulina 10g)
+%        Snack(chia 20g, spirulina 5g)
 d1.kcal_f = [
-    210+420+500+120;   % Day 1 (fully annotated)
-    0+0+0+0;           % Day 2 (not listed - estimate below)
-    0+0+0+0;           % Day 3
-    0+0+0+0;           % Day 4
-    0+0+0+0;           % Day 5
-    0+0+0+0;           % Day 6
-    0+0+0+0;           % Day 7
+    kcal_ingredient(foods.chia,30)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.oyster_mushroom,150)+kcal_ingredient(foods.lions_mane,100)+kcal_ingredient(foods.spirulina,20)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.crickets,40) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.lions_mane,100)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,5);   % Day 1
+
+    kcal_ingredient(foods.chia,15)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.crickets,40)+kcal_ingredient(foods.oyster_mushroom,150)+kcal_ingredient(foods.spirulina,20) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.lions_mane,200);   % Day 2
+
+    kcal_ingredient(foods.chia,40)+kcal_ingredient(foods.spirulina,5) + ...
+    kcal_ingredient(foods.oyster_mushroom,200)+kcal_ingredient(foods.spirulina,20)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.lions_mane,150)+kcal_ingredient(foods.spirulina,10);   % Day 3
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.crickets,50)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.mealworms,30)+kcal_ingredient(foods.chlorella,20)+kcal_ingredient(foods.lions_mane,100);   % Day 4
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,20) + ...
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.oyster_mushroom,100) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.lions_mane,200);   % Day 5
+
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,15) + ...
+    kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.oyster_mushroom,150) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.lions_mane,200);   % Day 6
+
+    kcal_ingredient(foods.chia,35)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.oyster_mushroom,200)+kcal_ingredient(foods.chlorella,30) + ...
+    kcal_ingredient(foods.mealworms,90)+kcal_ingredient(foods.lions_mane,150);   % Day 7
 ];
 
 % ---- DIET 2: Maximize O2 Consumption ----
@@ -76,21 +140,54 @@ d2.mass_f = [
     15+100+15 + 15+75+75+5 + 80+100+10 + 0;                  % Day 6
     15+50+15 + 15+100+100+5 + 80+10+80+100 + 0;              % Day 7
 ];
-d2.kcal_f = zeros(1,7);  % not annotated in Excel
+% Diet 2 is heavy in spirulina, chlorella, mushrooms, crickets, mealworms
+d2.kcal_f = [
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.oyster_mushroom,150)+kcal_ingredient(foods.lions_mane,100)+kcal_ingredient(foods.crickets,40) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,50);   % Day 1
+
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.oyster_mushroom,150)+kcal_ingredient(foods.lions_mane,150)+kcal_ingredient(foods.crickets,40) + ...
+    kcal_ingredient(foods.mealworms,60)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,30);   % Day 2
+
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.chia,50)+kcal_ingredient(foods.crickets,20) + ...
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.lions_mane,150)+kcal_ingredient(foods.chlorella,100) + ...
+    kcal_ingredient(foods.mealworms,60)+kcal_ingredient(foods.spirulina,100)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.chia,100);   % Day 3
+
+    kcal_ingredient(foods.spirulina,20)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.chia,50) + ...
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.lions_mane,120)+kcal_ingredient(foods.oyster_mushroom,150)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.lions_mane,100)+kcal_ingredient(foods.chlorella,5);   % Day 4
+
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,20)+kcal_ingredient(foods.oyster_mushroom,150) + ...
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.lions_mane,60)+kcal_ingredient(foods.mealworms,80) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.spirulina,5)+kcal_ingredient(foods.chlorella,10);   % Day 5
+
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.chlorella,15) + ...
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.lions_mane,75)+kcal_ingredient(foods.oyster_mushroom,75)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,100)+kcal_ingredient(foods.chlorella,10);   % Day 6
+
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chia,50)+kcal_ingredient(foods.chlorella,15) + ...
+    kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.lions_mane,100)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.lions_mane,80)+kcal_ingredient(foods.oyster_mushroom,100);   % Day 7
+];
 
 % ---- DIET 3: Maximize CO2 Consumption ----
 d3.name      = 'Diet 3: Max CO2';
 d3.objective = 'Maximize CO2 Consumption';
+% Note: this diet had the least quantified ingredient masses in the Excel sheet.
+% Spirulina and chlorella are the primary CO2 consumers; mushrooms fill bulk.
 d3.mass_f = [
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 1 (soybeans/kale/etc not quantified)
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 2 (alternates same pattern)
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 3 (repeat Day 1)
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 4 (repeat Day 2)
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 5
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 6
-    100+30 + 0+0+0+0 + 100+100 + 0;   % Day 7
+    100+30 + 100+100 + 0;   % Day 1: spirulina 100g, chlorella 30g, mushrooms 100+100g
+    100+30 + 100+100 + 0;   % Day 2
+    100+30 + 100+100 + 0;   % Day 3
+    100+30 + 100+100 + 0;   % Day 4
+    100+30 + 100+100 + 0;   % Day 5
+    100+30 + 100+100 + 0;   % Day 6
+    100+30 + 100+100 + 0;   % Day 7
 ];
-d3.kcal_f = zeros(1,7);
+d3_day = kcal_ingredient(foods.spirulina,100)+kcal_ingredient(foods.chlorella,30) + ...
+         kcal_ingredient(foods.oyster_mushroom,100)+kcal_ingredient(foods.lions_mane,100);
+d3.kcal_f = repmat(d3_day, 1, 7);
 
 % ---- DIET 4: Minimize Water ----
 d4.name      = 'Diet 4: Min Water';
@@ -104,14 +201,37 @@ d4.mass_f = [
     25+15 + 70+80 + 80+100 + 0;                  % Day 6
     35+10 + 100+30 + 100 + 30;                   % Day 7
 ];
+% Diet 4 uses same foods as Diet 1 but with lower water-content ingredients
 d4.kcal_f = [
-    210+400+500+120;   % Day 1 (annotated)
-    220+380+520+100;   % Day 2 (annotated)
-    180+300+420+150;   % Day 3 (annotated)
-    200+400+320+100;   % Day 4 (annotated)
-    200+300+520+150;   % Day 5 (annotated)
-    200+420+450+100;   % Day 6 (annotated)
-    200+300+550+150;   % Day 7 (annotated)
+    kcal_ingredient(foods.chia,30)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.crickets,50)+kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,20)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.oyster_mushroom,80)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,5);   % Day 1
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.mealworms,80) + ...
+    kcal_ingredient(foods.mealworms,90)+kcal_ingredient(foods.spirulina,10);   % Day 2
+
+    kcal_ingredient(foods.chia,40)+kcal_ingredient(foods.spirulina,5) + ...
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.mealworms,70) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.oyster_mushroom,80)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.chia,30);   % Day 3
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.mealworms,30)+kcal_ingredient(foods.chlorella,20)+kcal_ingredient(foods.oyster_mushroom,80);   % Day 4
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,20) + ...
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.mealworms,80) + ...
+    kcal_ingredient(foods.mealworms,90) + kcal_ingredient(foods.chia,30);   % Day 5
+
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,15) + ...
+    kcal_ingredient(foods.crickets,70)+kcal_ingredient(foods.mealworms,80) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.oyster_mushroom,100);   % Day 6
+
+    kcal_ingredient(foods.chia,35)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.mealworms,100)+kcal_ingredient(foods.chia,30) + ...
+    kcal_ingredient(foods.mealworms,100) + kcal_ingredient(foods.chia,30);   % Day 7
 ];
 
 % ---- DIET 5: Minimize Space ----
@@ -126,35 +246,71 @@ d5.mass_f = [
     8+20+15 + 70+8+50+10 + 80+80+8 + 25+3;            % Day 6
     35+5+10 + 40+30+8+5+25+10 + 100+15+5 + 30;        % Day 7
 ];
-d5.kcal_f = zeros(1,7);
+% Diet 5 prioritizes compact, calorie-dense foods: mealworms, crickets, spirulina, chia
+d5.kcal_f = [
+    kcal_ingredient(foods.chia,30)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.crickets,50)+kcal_ingredient(foods.oyster_mushroom,60)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,5);   % Day 1
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,10)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chlorella,15) + ...
+    kcal_ingredient(foods.mealworms,90)+kcal_ingredient(foods.oyster_mushroom,60)+kcal_ingredient(foods.spirulina,5) + ...
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,3);   % Day 2
+
+    kcal_ingredient(foods.chia,40)+kcal_ingredient(foods.spirulina,8) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chlorella,20)+kcal_ingredient(foods.crickets,10) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.oyster_mushroom,60)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.chia,30);   % Day 3
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chlorella,5)+kcal_ingredient(foods.crickets,15) + ...
+    kcal_ingredient(foods.crickets,60)+kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,15) + ...
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,5);   % Day 4
+
+    kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.spirulina,5)+kcal_ingredient(foods.chlorella,20) + ...
+    kcal_ingredient(foods.crickets,65)+kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.spirulina,10) + ...
+    kcal_ingredient(foods.mealworms,75)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chlorella,10)+kcal_ingredient(foods.crickets,10) + ...
+    kcal_ingredient(foods.spirulina,5)+kcal_ingredient(foods.chia,20);   % Day 5
+
+    kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chia,20)+kcal_ingredient(foods.chlorella,15) + ...
+    kcal_ingredient(foods.mealworms,70)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.crickets,50)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.mealworms,80)+kcal_ingredient(foods.oyster_mushroom,80)+kcal_ingredient(foods.spirulina,8) + ...
+    kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.spirulina,3);   % Day 6
+
+    kcal_ingredient(foods.chia,35)+kcal_ingredient(foods.spirulina,5)+kcal_ingredient(foods.chlorella,10) + ...
+    kcal_ingredient(foods.crickets,40)+kcal_ingredient(foods.mealworms,30)+kcal_ingredient(foods.spirulina,8)+kcal_ingredient(foods.chlorella,5)+kcal_ingredient(foods.chia,25)+kcal_ingredient(foods.crickets,10) + ...
+    kcal_ingredient(foods.mealworms,100)+kcal_ingredient(foods.spirulina,15)+kcal_ingredient(foods.chlorella,5) + ...
+    kcal_ingredient(foods.chia,30);   % Day 7
+];
 
 %  Collect all diets into array
 diets = [d1, d2, d3, d4, d5];
 num_diets = numel(diets);
 
 %% ==========================================================================
-%  SECTION 3: ESTIMATE MISSING CALORIES
-%  Where kcal_f is 0, use a rough estimate:
-%  ~1800 kcal/day baseline for women (space mission sedentary-moderate)
-%  We scale by mass ratio relative to Diet 4 Day 1 (best-annotated day).
-%  This is flagged clearly in plots.
+%  SECTION 4: FILL ANY REMAINING ZERO CALORIES
+%  All diets now use ingredient-level calorie calculations from the food
+%  database. This section is a safety net for any days that still have 0
+%  (e.g. foods not in the database). Uses confirmed targets from
+%  Overall_Data_Collection.xlsx: 2000 kcal/day women, 2600 kcal/day men.
 % ==========================================================================
 
-BASELINE_KCAL_F = 1800;   % kcal/day estimated for women (space mission)
+TARGET_KCAL_F = 2000;   % kcal/day women  (from Dietary Requirements sheet)
+TARGET_KCAL_M = 2600;   % kcal/day men    (from Dietary Requirements sheet)
 
 for d = 1:num_diets
     ref_mass = mean(diets(d).mass_f);
     for day = 1:7
         if diets(d).kcal_f(day) == 0
-            % Scale estimate by mass relative to diet mean
             scale = diets(d).mass_f(day) / ref_mass;
-            diets(d).kcal_f(day) = round(BASELINE_KCAL_F * scale);
+            diets(d).kcal_f(day) = round(TARGET_KCAL_F * scale);
         end
     end
 end
 
 %% ==========================================================================
-%  SECTION 4: EXPAND TO SIM_DAYS (days 8-14 repeat days 1-7)
+%  SECTION 5: EXPAND TO SIM_DAYS (days 8-14 repeat days 1-7)
 % ==========================================================================
 
 for d = 1:num_diets
@@ -177,7 +333,7 @@ for d = 1:num_diets
 end
 
 %% ==========================================================================
-%  SECTION 5: CREW-LEVEL TOTALS
+%  SECTION 6: CREW-LEVEL TOTALS
 % ==========================================================================
 
 days_vec = 1:sim_days;
@@ -205,7 +361,7 @@ for d = 1:num_diets
 end
 
 %% ==========================================================================
-%  SECTION 6: COLORS & STYLE
+%  SECTION 7: COLORS & STYLE
 % ==========================================================================
 
 diet_colors = [
@@ -363,7 +519,7 @@ end
 % ==========================================================================
 
 total_crew = num_women + num_men;
-TARGET_KCAL_PER_PERSON = 2000;
+TARGET_KCAL_PER_PERSON = TARGET_KCAL_F;
 
 metrics = zeros(num_diets, 4);
 for d = 1:num_diets
